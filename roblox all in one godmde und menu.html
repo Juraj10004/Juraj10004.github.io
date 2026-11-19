@@ -1,0 +1,363 @@
+
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Roblox 2.5D – All-in-One mit Godmode-Menü</title>
+<style>
+  body { margin:0; overflow:hidden; background:#000; font-family:Arial }
+  #menu,#hud{
+    position:absolute; top:10px; left:10px; background:rgba(0,0,0,.6);
+    padding:10px; color:#fff; border-radius:6px; z-index:10
+  }
+  #menu button{
+    display:block; width:220px; margin:4px 0; padding:6px;
+    background:#222; color:#fff; border:1px solid #555; cursor:pointer; text-align:left
+  }
+  canvas{display:block}
+</style>
+</head>
+<body>
+
+<div id="menu">
+  <h3>Roblox Plattform</h3>
+
+  <b>Godmode:</b><br>
+  <button onclick="setGodmode(true)">Godmode AN</button>
+  <button onclick="setGodmode(false)">Godmode AUS</button>
+  <hr>
+
+  <b>Spiele:</b><br>
+  <button onclick="startGame('arena')">Battle Arena</button>
+  <button onclick="startGame('zombie')">Zombie Horde</button>
+  <button onclick="startGame('collect')">Collect Game</button>
+  <button onclick="startGame('city')">City Explorer</button>
+  <button onclick="startGame('obby')">Obby / Parkour</button>
+  <button onclick="startGame('race')">Rennen</button>
+  <button onclick="startGame('ctf')">Capture the Flag</button>
+  <button onclick="startGame('br')">Battle Royale</button>
+  <button onclick="startGame('boss')">Boss Fight</button>
+</div>
+
+<div id="hud" style="display:none;">
+  <div id="stats"></div>
+</div>
+
+<canvas id="game"></canvas>
+
+<script>
+const c=document.getElementById("game"),x=c.getContext("2d");
+function rs(){c.width=innerWidth;c.height=innerHeight}rs();addEventListener("resize",rs);
+
+// GODMODE
+let GODMODE = true;
+function setGodmode(v){
+  GODMODE = v;
+  if (GODMODE){P.hp=9999;P.max=9999;}
+  else {P.hp=100;P.max=100;}
+}
+
+// PLAYER
+let P={x:300,y:300,r:12,s:3,hp:9999,max:9999,k:0,col:0,coin:0,flag:false,alive:true};
+
+// ENTITIES
+let BOTS=[],BUL=[],BBUL=[],LOOT=[],FX=[],PLAT=[],CP=[],ZONE=null,BOSS=null;
+
+// INPUT
+let K={},mx=0,my=0;
+document.onkeydown=e=>K[e.key.toLowerCase()]=1;
+document.onkeyup=e=>K[e.key.toLowerCase()]=0;
+c.onmousemove=e=>{mx=e.clientX;my=e.clientY};
+c.onmousedown=()=>shoot();
+
+let mode=null,t0=0;
+
+// START
+function startGame(m){
+  mode=m;document.getElementById("menu").style.display="none";
+  document.getElementById("hud").style.display="block";
+  reset();
+}
+
+// RESET
+function reset(){
+  P.x=c.width/2;P.y=c.height/2;P.k=0;P.col=0;P.coin=0;P.flag=false;P.alive=true;
+  if(GODMODE){P.hp=9999;P.max=9999;} else {P.hp=100;P.max=100;}
+  BOTS=[];BUL=[];BBUL=[];LOOT=[];FX=[];PLAT=[];CP=[];ZONE=null;BOSS=null;
+  t0=performance.now();
+
+  if(mode=="arena") spawnBots(40,"n");
+  if(mode=="zombie") spawnBots(20,"z");
+  if(mode=="collect") spawnLoot(15);
+  if(mode=="city") spawnNPC(40);
+  if(mode=="obby") setupObby();
+  if(mode=="race") setupRace();
+  if(mode=="ctf") setupCTF();
+  if(mode=="br") setupBR();
+  if(mode=="boss") setupBoss();
+}
+
+// SPAWN
+function spawnBots(n,t="n"){
+  for(let i=0;i<n;i++){
+    BOTS.push({
+      x:Math.random()*c.width,y:Math.random()*c.height,r:10,
+      hp:t=="boss"?500:(t=="z"?40:30),
+      s:t=="z"?1.2:1.5,
+      col:t=="z"?"#5f5":"hsl("+Math.random()*360+",80%,60%)",
+      cd:0,type:t
+    });
+  }
+}
+function spawnNPC(n){
+  for(let i=0;i<n;i++){
+    BOTS.push({x:Math.random()*c.width,y:Math.random()*c.height,r:10,hp:9999,s:1,
+      col:"#5af",cd:9999,type:"npc",vx:0,vy:0});
+  }
+}
+function spawnLoot(n){for(let i=0;i<n;i++) dropLoot()}
+function dropLoot(x,y){
+  const T=["hp","coin","pow"],t=T[Math.random()*3|0];
+  LOOT.push({x:x??Math.random()*c.width,y:y??Math.random()*c.height,r:8,t,
+    col:t=="hp"?"#0f8":t=="coin"?"#fd0":"#f0f"});
+}
+
+// FX
+function fx(x,y,col,n=12,p=3){
+  for(let i=0;i<n;i++){
+    let a=Math.random()*6.28,s=Math.random()*p;
+    FX.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,l:20+Math.random()*20,col});
+  }
+}
+
+// MODES
+function setupObby(){
+  for(let i=0;i<10;i++)
+    PLAT.push({x:100+i*80,y:c.height/2+(Math.random()*120-60),w:60,h:20});
+  CP.push({x:PLAT[9].x+40,y:PLAT[9].y});
+  P.x=PLAT[0].x;P.y=PLAT[0].y-40;
+}
+function setupRace(){
+  for(let i=0;i<5;i++)
+    CP.push({x:150+i*150,y:c.height/2+(i%2?-100:100)});
+  P.x=CP[0].x;P.y=CP[0].y;
+}
+let FLAG=null,BASE=null;
+function setupCTF(){
+  FLAG={x:c.width*.75,y:c.height*.5};
+  BASE={x:c.width*.25,y:c.height*.5};
+  spawnBots(20,"n");
+}
+function setupBR(){
+  spawnBots(30,"n");
+  ZONE={x:c.width/2,y:c.height/2,r:Math.min(c.width,c.height)/2};
+}
+function setupBoss(){
+  BOSS={x:c.width/2,y:c.height/2,r:30,hp:800,max:800,col:"#f33",cd:0};
+  spawnBots(10,"z");
+}
+
+// SHOOT
+function shoot(){
+  let dx=mx-P.x,dy=my-P.y,d=Math.hypot(dx,dy)||1;
+  BUL.push({x:P.x,y:P.y,vx:dx/d*7,vy:dy/d*7,r:4});
+}
+
+// UPDATE PLAYER
+function updP(){
+  if(K["w"])P.y-=P.s;if(K["s"])P.y+=P.s;if(K["a"])P.x-=P.s;if(K["d"])P.x+=P.s;
+  P.x=Math.max(0,Math.min(c.width,P.x));
+  P.y=Math.max(0,Math.min(c.height,P.y));
+
+  if(mode=="obby"){
+    P.y+=3;let on=false;
+    for(let p of PLAT){
+      if(P.x>p.x&&P.x<p.x+p.w&&P.y+P.r>p.y&&P.y+P.r<p.y+p.h+10){
+        P.y=p.y-P.r;on=true;if(K[" "]||K["space"])P.y-=15;
+      }
+    }
+    if(!on&&P.y>c.height+50){P.x=PLAT[0].x;P.y=PLAT[0].y-40;}
+  }
+
+  if(mode=="race"&&CP.length){
+    let cp=CP[0];
+    if(Math.hypot(P.x-cp.x,P.y-cp.y)<20)CP.shift();
+  }
+
+  if(mode=="ctf"){
+    if(!P.flag&&Math.hypot(P.x-FLAG.x,P.y-FLAG.y)<20)P.flag=true;
+    if(P.flag&&Math.hypot(P.x-BASE.x,P.y-BASE.y)<20){P.flag=false;P.coin+=10;}
+  }
+
+  if(mode=="br"&&ZONE){
+    ZONE.r*=0.9995;
+    if(!GODMODE){
+      let d=Math.hypot(P.x-ZONE.x,P.y-ZONE.y);
+      if(d>ZONE.r)P.hp-=0.2;
+    }
+  }
+
+  if(!GODMODE && P.hp<=0)P.alive=false;
+}
+
+// UPDATE BOTS
+function updBots(){
+  for(let b of BOTS){
+    if(b.type=="npc"){
+      if(Math.random()<0.02){b.vx=(Math.random()*2-1)*b.s;b.vy=(Math.random()*2-1)*b.s}
+      b.x+=b.vx||0;b.y+=b.vy||0;continue;
+    }
+    let dx=P.x-b.x,dy=P.y-b.y,d=Math.hypot(dx,dy)||1;
+    b.x+=dx/d*b.s;b.y+=dy/d*b.s;
+
+    if(mode!="collect"&&b.cd--<=0&&b.type!="boss"){
+      BBUL.push({x:b.x,y:b.y,vx:dx/d*3,vy:dy/d*3,r:4});
+      b.cd=60+Math.random()*40;
+    }
+  }
+
+  if(BOSS){
+    let dx=P.x-BOSS.x,dy=P.y-BOSS.y,d=Math.hypot(dx,dy)||1;
+    BOSS.x+=dx/d*0.5;BOSS.y+=dy/d*0.5;
+    if(BOSS.cd--<=0){
+      for(let i=0;i<8;i++){
+        let a=i*(6.28/8);
+        BBUL.push({x:BOSS.x,y:BOSS.y,vx:Math.cos(a)*4,vy:Math.sin(a)*4,r:5});
+      }
+      BOSS.cd=120;
+    }
+  }
+}
+
+// UPDATE BULLETS
+function updBul(){
+  for(let bu of BUL){
+    bu.x+=bu.vx;bu.y+=bu.vy;
+    for(let b of BOTS){
+      if(Math.hypot(bu.x-b.x,bu.y-b.y)<b.r+bu.r){
+        b.hp-=10;bu.x=-9999;
+        fx(b.x,b.y,"#f44",10,4);fx(b.x,b.y,"#fa0",6,2);
+        if(b.hp<=0){
+          P.k++;if(Math.random()<0.6)dropLoot(b.x,b.y);
+          BOTS.splice(BOTS.indexOf(b),1);
+          if(["arena","zombie","br"].includes(mode))spawnBots(1,b.type);
+        }
+      }
+    }
+    if(BOSS&&Math.hypot(bu.x-BOSS.x,bu.y-BOSS.y)<BOSS.r+bu.r){
+      BOSS.hp-=10;bu.x=-9999;fx(BOSS.x,BOSS.y,"#f0f",15,3);
+      if(BOSS.hp<=0){fx(BOSS.x,BOSS.y,"#fff",40,6);BOSS=null;P.coin+=100;}
+    }
+  }
+
+  for(let bu of BBUL){
+    bu.x+=bu.vx;bu.y+=bu.vy;
+    if(Math.hypot(bu.x-P.x,bu.y-P.y)<P.r+bu.r){
+      bu.x=-9999;fx(P.x,P.y,"#4af",4,1.5);
+      if(!GODMODE){
+        P.hp-=5;
+        if(P.hp<=0)P.alive=false;
+      }
+    }
+  }
+}
+
+// UPDATE LOOT
+function updLoot(){
+  for(let i=LOOT.length-1;i>=0;i--){
+    let p=LOOT[i];
+    if(Math.hypot(p.x-P.x,p.y-P.y)<p.r+P.r){
+      if(p.t=="hp")P.hp=P.max;
+      if(p.t=="coin")P.coin++;
+      if(p.t=="pow")P.s+=0.3;
+      LOOT.splice(i,1);
+    }
+  }
+}
+
+// UPDATE FX
+function updFX(){
+  for(let i=FX.length-1;i>=0;i--){
+    let f=FX[i];f.x+=f.vx;f.y+=f.vy;f.l--;
+    if(f.l<=0)FX.splice(i,1);
+  }
+}
+
+// DRAW
+function draw(){
+  x.fillStyle="#111";x.fillRect(0,0,c.width,c.height);
+
+  if(["city","arena","zombie","br","boss"].includes(mode)){
+    x.fillStyle="#181828";let s=80;
+    for(let i=0;i<c.width;i+=s)
+      for(let j=0;j<c.height;j+=s)
+        if(((i/s)+(j/s))%2==0)x.fillRect(i+10,j+10,s-20,s-20);
+  }
+
+  if(mode=="obby"){
+    x.fillStyle="#333";
+    for(let p of PLAT)x.fillRect(p.x,p.y,p.w,p.h);
+  }
+
+  if(mode=="race"){
+    x.strokeStyle="#0f8";x.lineWidth=2;
+    for(let cp of CP){x.beginPath();x.arc(cp.x,cp.y,15,0,6.28);x.stroke()}
+  }
+
+  if(mode=="ctf"){
+    x.fillStyle="#f00";x.beginPath();x.arc(FLAG.x,FLAG.y,10,0,6.28);x.fill();
+    x.fillStyle="#0f0";x.beginPath();x.arc(BASE.x,BASE.y,12,0,6.28);x.fill();
+  }
+
+  if(mode=="br"&&ZONE){
+    x.strokeStyle="rgba(0,255,0,.5)";x.lineWidth=3;
+    x.beginPath();x.arc(ZONE.x,ZONE.y,ZONE.r,0,6.28);x.stroke();
+  }
+
+  for(let p of LOOT){
+    x.fillStyle=p.col;x.beginPath();x.arc(p.x,p.y,p.r,0,6.28);x.fill();
+  }
+
+  for(let b of BOTS){
+    x.fillStyle=b.col;x.beginPath();x.arc(b.x,b.y,b.r,0,6.28);x.fill();
+  }
+
+  if(BOSS){
+    x.fillStyle=BOSS.col;x.beginPath();x.arc(BOSS.x,BOSS.y,BOSS.r,0,6.28);x.fill();
+    x.fillStyle="#000";x.fillRect(20,20,200,10);
+    x.fillStyle="#f33";x.fillRect(20,20,200*(BOSS.hp/BOSS.max),10);
+  }
+
+  x.fillStyle="white";x.beginPath();x.arc(P.x,P.y,P.r,0,6.28);x.fill();
+  if(P.flag){x.fillStyle="#f00";x.fillRect(P.x-3,P.y-25,6,20)}
+
+  x.fillStyle="yellow";
+  for(let b of BUL){x.beginPath();x.arc(b.x,b.y,b.r,0,6.28);x.fill()}
+
+  x.fillStyle="red";
+  for(let b of BBUL){x.beginPath();x.arc(b.x,b.y,b.r,0,6.28);x.fill()}
+
+  for(let f of FX){x.fillStyle=f.col;x.fillRect(f.x,f.y,3,3)}
+
+  let t=((performance.now()-t0)/1000).toFixed(1);
+  document.getElementById("stats").innerHTML=
+    `Modus: ${mode}<br>` +
+    `HP: ${GODMODE ? "∞ (Godmode)" : Math.round(P.hp)+"/"+P.max}<br>` +
+    `Kills: ${P.k}<br>` +
+    `Coins: ${P.coin}<br>` +
+    `Collected: ${P.col}<br>` +
+    `Zeit: ${t}s`;
+}
+
+// LOOP
+function loop(){
+  if(mode){
+    updP();updBots();updBul();updLoot();updFX();draw();
+  }
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
+
